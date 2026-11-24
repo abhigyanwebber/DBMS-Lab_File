@@ -1,8 +1,7 @@
 -- ============================================================
 -- EXPERIMENT 9: RAILWAY BOOKING INDEXING AND QUERY BENCHMARK
 -- Uses the Experiment 3 database.
--- Run table creation and data generation only once.
--- MySQL 8.0.18+ is required for EXPLAIN ANALYZE.
+-- Run table creation and data generation 
 -- ============================================================
 
 -- 1. CREATE RAILWAY BOOKING TABLE
