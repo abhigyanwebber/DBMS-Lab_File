@@ -2,7 +2,6 @@
 -- EXPERIMENT 10: QUERY OPTIMIZATION USING INDEXING AND REWRITING
 -- Uses the Experiment 3 database.
 -- Run table creation and data generation only once.
--- MySQL 8.0.18+ is required for EXPLAIN ANALYZE.
 -- ============================================================
 
 -- 1. CREATE SALES ORDERS TABLE
