@@ -1,6 +1,5 @@
 -- ============================================================
 -- EXPERIMENT 7: SALES NORMALIZATION FROM UNF TO 3NF AND BCNF
--- MySQL 8.x
 -- Uses a separate practice database as specified in the practical.
 -- Run this script from top to bottom in a fresh database.
 -- ============================================================
