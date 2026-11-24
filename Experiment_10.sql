@@ -1,0 +1,220 @@
+-- ============================================================
+-- EXPERIMENT 10: QUERY OPTIMIZATION USING INDEXING AND REWRITING
+-- Uses the Experiment 3 database.
+-- Run table creation and data generation only once.
+-- MySQL 8.0.18+ is required for EXPLAIN ANALYZE.
+-- ============================================================
+
+-- 1. CREATE SALES ORDERS TABLE
+CREATE TABLE sales_orders (
+    order_id INT PRIMARY KEY,
+    order_date DATE NOT NULL,
+    customer_id INT NOT NULL,
+    customer_name VARCHAR(60),
+    region VARCHAR(20),
+    status VARCHAR(15),
+    category VARCHAR(30),
+    amount DECIMAL(10,2)
+) ENGINE=InnoDB;
+
+-- 2. GENERATE A DATASET WITH 10,000 ROWS
+SET SESSION cte_max_recursion_depth = 11000;
+
+INSERT INTO sales_orders
+WITH RECURSIVE seq AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM seq WHERE n < 10000
+)
+SELECT
+    n,
+    DATE_ADD('2024-01-01', INTERVAL MOD(n,1096) DAY),
+    MOD(n,800) + 1,
+    CONCAT('Customer ',MOD(n,800)+1),
+    ELT(MOD(n,4)+1,'North','South','East','West'),
+    ELT(MOD(n,4)+1,'Pending','Shipped','Delivered','Cancelled'),
+    ELT(MOD(n,5)+1,'Electronics','Books','Clothing','Home','Sports'),
+    100 + MOD(n*29,9500) / 10
+FROM seq;
+
+SELECT COUNT(*) AS total_rows
+FROM sales_orders;
+
+-- ============================================================
+-- 3. SLOW QUERY 1 – FUNCTION ON DATE
+-- Run before creating the secondary indexes.
+-- ============================================================
+EXPLAIN
+SELECT COUNT(*)
+FROM sales_orders
+WHERE YEAR(order_date) = 2026;
+
+-- Actual execution measurement before optimization:
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM sales_orders
+WHERE YEAR(order_date) = 2026;
+
+-- ============================================================
+-- 4. SLOW QUERY 2 – MULTIPLE FILTERS
+-- ============================================================
+EXPLAIN
+SELECT order_id, customer_name, amount
+FROM sales_orders
+WHERE status = 'Delivered'
+  AND region = 'North';
+
+EXPLAIN ANALYZE
+SELECT order_id, customer_name, amount
+FROM sales_orders
+WHERE status = 'Delivered'
+  AND region = 'North';
+
+-- ============================================================
+-- 5. SLOW QUERY 3 – GROUPING
+-- ============================================================
+EXPLAIN
+SELECT customer_id, SUM(amount) AS total_sales
+FROM sales_orders
+GROUP BY customer_id
+ORDER BY total_sales DESC
+LIMIT 10;
+
+EXPLAIN ANALYZE
+SELECT customer_id, SUM(amount) AS total_sales
+FROM sales_orders
+GROUP BY customer_id
+ORDER BY total_sales DESC
+LIMIT 10;
+
+-- ============================================================
+-- 6. SLOW QUERY 4 – FUNCTION ON REGION
+-- ============================================================
+EXPLAIN
+SELECT COUNT(*)
+FROM sales_orders
+WHERE UPPER(region) = 'NORTH';
+
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM sales_orders
+WHERE UPPER(region) = 'NORTH';
+
+-- ============================================================
+-- 7. SLOW QUERY 5 – DATE EXTRACTION
+-- ============================================================
+EXPLAIN
+SELECT order_id, customer_id, amount
+FROM sales_orders
+WHERE MONTH(order_date) = 6
+  AND DAY(order_date) = 15;
+
+EXPLAIN ANALYZE
+SELECT order_id, customer_id, amount
+FROM sales_orders
+WHERE MONTH(order_date) = 6
+  AND DAY(order_date) = 15;
+
+-- ============================================================
+-- 8. CREATE INDEXES AND UPDATE STATISTICS
+-- ============================================================
+CREATE INDEX idx_order_date
+ON sales_orders(order_date);
+
+CREATE INDEX idx_status_region
+ON sales_orders(status, region);
+
+CREATE INDEX idx_customer
+ON sales_orders(customer_id);
+
+CREATE INDEX idx_region
+ON sales_orders(region);
+
+ANALYZE TABLE sales_orders;
+
+-- ============================================================
+-- 9. OPTIMIZED QUERY 1 – DATE RANGE
+-- ============================================================
+EXPLAIN
+SELECT COUNT(*)
+FROM sales_orders
+WHERE order_date >= '2026-01-01'
+  AND order_date < '2027-01-01';
+
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM sales_orders
+WHERE order_date >= '2026-01-01'
+  AND order_date < '2027-01-01';
+
+-- ============================================================
+-- 10. OPTIMIZED QUERY 2 – COMPOSITE INDEX
+-- ============================================================
+EXPLAIN
+SELECT order_id, customer_name, amount
+FROM sales_orders
+WHERE status = 'Delivered'
+  AND region = 'North';
+
+EXPLAIN ANALYZE
+SELECT order_id, customer_name, amount
+FROM sales_orders
+WHERE status = 'Delivered'
+  AND region = 'North';
+
+-- ============================================================
+-- 11. OPTIMIZED QUERY 3 – GROUPING
+-- ============================================================
+EXPLAIN
+SELECT customer_id, SUM(amount) AS total_sales
+FROM sales_orders
+GROUP BY customer_id
+ORDER BY total_sales DESC
+LIMIT 10;
+
+EXPLAIN ANALYZE
+SELECT customer_id, SUM(amount) AS total_sales
+FROM sales_orders
+GROUP BY customer_id
+ORDER BY total_sales DESC
+LIMIT 10;
+
+-- ============================================================
+-- 12. OPTIMIZED QUERY 4 – REGION INDEX
+-- ============================================================
+EXPLAIN
+SELECT COUNT(*)
+FROM sales_orders
+WHERE region = 'North';
+
+EXPLAIN ANALYZE
+SELECT COUNT(*)
+FROM sales_orders
+WHERE region = 'North';
+
+-- ============================================================
+-- 13. OPTIMIZED QUERY 5 – DATE RANGE REWRITE
+-- ============================================================
+EXPLAIN
+SELECT order_id, customer_id, amount
+FROM sales_orders
+WHERE order_date >= '2026-06-15'
+  AND order_date < '2026-06-16';
+
+EXPLAIN ANALYZE
+SELECT order_id, customer_id, amount
+FROM sales_orders
+WHERE order_date >= '2026-06-15'
+  AND order_date < '2026-06-16';
+
+-- ============================================================
+-- 14. COMPARISON BEFORE AND AFTER OPTIMIZATION
+-- Query 1: YEAR(order_date) -> date range + idx_order_date.
+-- Query 2: status + region -> composite idx_status_region.
+-- Query 3: customer grouping -> idx_customer assists grouping.
+-- Query 4: UPPER(region) -> direct region equality + idx_region.
+-- Query 5: MONTH/DAY extraction -> one-day date range + idx_order_date.
+--
+-- Compare EXPLAIN plans and EXPLAIN ANALYZE timing/actual rows.
+-- Do not invent execution times; record the values returned by MySQL.
+-- END EXPERIMENT 10
